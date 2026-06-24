@@ -1,21 +1,21 @@
 package com.pavewatch.demo.controller;
 
-import com.pavewatch.demo.model.PotholeEvent;
-import com.pavewatch.demo.repository.PotholeEventRepository;
+import com.pavewatch.demo.model.PavewatchEvent;
+import com.pavewatch.demo.repository.PavewatchEventRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/potholes")
+@RequestMapping("/api/pavewatchs")
 @CrossOrigin(origins = "*")
-public class PotholeController {
+public class PavewatchController {
 
     @Autowired
-    private PotholeEventRepository repository;
+    private PavewatchEventRepository repository;
 
     @GetMapping
-    public List<PotholeEvent> getAllPotholes() {
+    public List<PavewatchEvent> getAllPavewatchs() {
         return repository.findAll();
     }
 }

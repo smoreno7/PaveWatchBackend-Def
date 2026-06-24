@@ -2,8 +2,8 @@ package com.pavewatch.demo.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pavewatch.demo.model.PotholeEvent;
-import com.pavewatch.demo.repository.PotholeEventRepository;
+import com.pavewatch.demo.model.PavewatchEvent;
+import com.pavewatch.demo.repository.PavewatchEventRepository;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -42,11 +42,11 @@ public class MqttConfig {
     private String password;
 
     @Autowired
-    private PotholeEventRepository repository;
+    private PavewatchEventRepository repository;
 
     private final GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
 
-    // 1. Configuramos la conexión segura a HiveMQ Cloud
+    // Configuramos la conexión segura a HiveMQ Cloud
     @Bean
     public MqttPahoClientFactory mqttClientFactory() {
         DefaultMqttPahoClientFactory factory = new DefaultMqttPahoClientFactory();
@@ -58,7 +58,7 @@ public class MqttConfig {
 
         // Configuraciones recomendadas para conexiones en la nube
         options.setCleanSession(true);
-        options.setAutomaticReconnect(true); // Si el Wi-Fi parpadea, se reconecta solo
+        options.setAutomaticReconnect(true); // Si el WiFi parpadea, se reconecta solo
         options.setConnectionTimeout(30);
 
         factory.setConnectionOptions(options);
@@ -71,7 +71,7 @@ public class MqttConfig {
         return new DirectChannel();
     }
 
-    // 3. Adaptador de Mensajes (Suscripción al tema en la nube)
+    // Adaptador de Mensajes (Suscripción al tema en la nube)
     @Bean
     public MessageProducer inbound() {
         // Usamos un ClientID único para evitar conflictos con otros dispositivos
@@ -105,7 +105,7 @@ public class MqttConfig {
 
                 Point location = geometryFactory.createPoint(new Coordinate(longitud, latitud));
 
-                PotholeEvent nuevoBache = new PotholeEvent();
+                PavewatchEvent nuevoBache = new PavewatchEvent();
                 nuevoBache.setLocation(location);
                 nuevoBache.setSeverity(BigDecimal.valueOf(severidad));
                 nuevoBache.setReportedBy(dispositivo);

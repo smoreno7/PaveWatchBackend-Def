@@ -6,8 +6,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "pothole_events") // Le decimos exactamente qué tabla mirar
-public class PotholeEvent {
+@Table(name = "pavewatch_events") // Le decimos exactamente qué tabla mirar
+public class PavewatchEvent {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -30,7 +30,7 @@ public class PotholeEvent {
 
     private Boolean verified;
 
-    // --- Genera todos los Getters y Setters aquí (Alt + Insert) ---
+    // Getters y Setters
 
     public Long getId() {
         return id;
