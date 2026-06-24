@@ -2,8 +2,8 @@ package com.pavewatch.demo.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pavewatch.demo.model.PavewatchEvent;
-import com.pavewatch.demo.repository.PavewatchEventRepository;
+import com.pavewatch.demo.modelo.EventoPavewatch;
+import com.pavewatch.demo.repositorio.EventoPavewatchRepositorio;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -29,10 +29,10 @@ import java.math.BigDecimal;
 public class MqttConfig {
 
     @Value("${mqtt.broker.url}")
-    private String brokerUrl;
+    private String urlBroker;
 
     @Value("${mqtt.topic}")
-    private String topic;
+    private String topico;
 
     // Inyectamos las nuevas credenciales de la nube
     @Value("${mqtt.username}")
@@ -42,7 +42,7 @@ public class MqttConfig {
     private String password;
 
     @Autowired
-    private PavewatchEventRepository repository;
+    private EventoPavewatchRepositorio repository;
 
     private final GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
 
@@ -50,66 +50,65 @@ public class MqttConfig {
     @Bean
     public MqttPahoClientFactory mqttClientFactory() {
         DefaultMqttPahoClientFactory factory = new DefaultMqttPahoClientFactory();
-        MqttConnectOptions options = new MqttConnectOptions();
+        MqttConnectOptions opciones = new MqttConnectOptions();
 
-        options.setServerURIs(new String[] { brokerUrl });
-        options.setUserName(username);
-        options.setPassword(password.toCharArray());
+        opciones.setServerURIs(new String[] { urlBroker });
+        opciones.setUserName(username);
+        opciones.setPassword(password.toCharArray());
 
         // Configuraciones recomendadas para conexiones en la nube
-        options.setCleanSession(true);
-        options.setAutomaticReconnect(true); // Si el WiFi parpadea, se reconecta solo
-        options.setConnectionTimeout(30);
+        opciones.setCleanSession(true);
+        opciones.setAutomaticReconnect(true); // Si el WiFi parpadea, se reconecta solo
+        opciones.setConnectionTimeout(30);
 
-        factory.setConnectionOptions(options);
+        factory.setConnectionOptions(opciones);
         return factory;
     }
 
     // 2. Canal de entrada
     @Bean
-    public MessageChannel mqttInputChannel() {
+    public MessageChannel mqttCanalInput() {
         return new DirectChannel();
     }
 
     // Adaptador de Mensajes (Suscripción al tema en la nube)
     @Bean
-    public MessageProducer inbound() {
+    public MessageProducer receptorMensajes() {
         // Usamos un ClientID único para evitar conflictos con otros dispositivos
-        String clientId = "server_pavewatch_" + System.currentTimeMillis();
+        String idCliente = "server_pavewatch_" + System.currentTimeMillis();
 
-        MqttPahoMessageDrivenChannelAdapter adapter =
-                new MqttPahoMessageDrivenChannelAdapter(clientId, mqttClientFactory(), topic);
-        adapter.setCompletionTimeout(5000);
-        adapter.setConverter(new DefaultPahoMessageConverter());
-        adapter.setQos(1); // QOS 1 garantiza que el bache se entregue al menos una vez
-        adapter.setOutputChannel(mqttInputChannel());
-        return adapter;
+        MqttPahoMessageDrivenChannelAdapter adaptador = new MqttPahoMessageDrivenChannelAdapter(idCliente, mqttClientFactory(), topico);
+        adaptador.setCompletionTimeout(5000);
+        adaptador.setConverter(new DefaultPahoMessageConverter());
+        adaptador.setQos(1); // QOS 1 garantiza que el bache se entregue al menos una vez
+        adaptador.setOutputChannel(mqttCanalInput());
+        return adaptador;
     }
 
-    // 4. Procesamiento del JSON y PostGIS
+    // === 4. Procesamiento del JSON y PostGIS ===
     @Bean
-    @ServiceActivator(inputChannel = "mqttInputChannel")
+    @ServiceActivator(inputChannel = "mqttCanalInput")
     public MessageHandler handler() {
         return message -> {
             String payload = (String) message.getPayload();
             System.out.println("¡Bache recibido desde HiveMQ Cloud! Datos: " + payload);
 
             try {
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode jsonNode = mapper.readTree(payload);
+                ObjectMapper mapeador = new ObjectMapper();
+                JsonNode jsonNode = mapeador.readTree(payload);
 
                 double latitud = jsonNode.get("latitud").asDouble();
                 double longitud = jsonNode.get("longitud").asDouble();
                 double severidad = jsonNode.get("severidad").asDouble();
                 String dispositivo = jsonNode.has("dispositivo") ? jsonNode.get("dispositivo").asText() : "desconocido";
 
-                Point location = geometryFactory.createPoint(new Coordinate(longitud, latitud));
+                Point ubicacion = geometryFactory.createPoint(new Coordinate(longitud, latitud));
 
-                PavewatchEvent nuevoBache = new PavewatchEvent();
-                nuevoBache.setLocation(location);
-                nuevoBache.setSeverity(BigDecimal.valueOf(severidad));
-                nuevoBache.setReportedBy(dispositivo);
-                nuevoBache.setVerified(false);
+                EventoPavewatch nuevoBache = new EventoPavewatch();
+                nuevoBache.setUbicacion(ubicacion);
+                nuevoBache.setSeveridad(BigDecimal.valueOf(severidad));
+                nuevoBache.setReportadoPor(dispositivo);
+                nuevoBache.setVerificado(false);
 
                 repository.save(nuevoBache);
                 System.out.println("-> Guardado exitosamente en Base de Datos vía encriptada.");
