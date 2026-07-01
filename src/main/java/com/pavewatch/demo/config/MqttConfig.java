@@ -73,7 +73,7 @@ public class MqttConfig {
 
     // Adaptador de Mensajes (Suscripción al tema en la nube)
     @Bean
-    public MessageProducer receptorMensajes() {
+    public MessageProducer emisorMensajes() {
         // Usamos un ClientID único para evitar conflictos con otros dispositivos
         String idCliente = "server_pavewatch_" + System.currentTimeMillis();
 

@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "eventos_pavewatch") // Le decimos exactamente qué tabla mirar
+@Table(name = "eventos_pavewatch") // Le decimos exactamente que tabla mirar
 public class EventoPavewatch {
 
     @Id
