@@ -24,6 +24,8 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageHandler;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Optional;
 
 @Configuration
 public class MqttConfig {
@@ -34,7 +36,6 @@ public class MqttConfig {
     @Value("${mqtt.topic}")
     private String topico;
 
-    // Inyectamos las nuevas credenciales de la nube
     @Value("${mqtt.username}")
     private String username;
 
@@ -46,7 +47,7 @@ public class MqttConfig {
 
     private final GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
 
-    // Configuramos la conexión segura a HiveMQ Cloud
+    // 1. Configuración de la conexión segura a HiveMQ Cloud
     @Bean
     public MqttPahoClientFactory mqttClientFactory() {
         DefaultMqttPahoClientFactory factory = new DefaultMqttPahoClientFactory();
@@ -55,8 +56,6 @@ public class MqttConfig {
         opciones.setServerURIs(new String[] { urlBroker });
         opciones.setUserName(username);
         opciones.setPassword(password.toCharArray());
-
-        // Configuraciones recomendadas para conexiones en la nube
         opciones.setCleanSession(true);
         opciones.setAutomaticReconnect(true); // Si el WiFi parpadea, se reconecta solo
         opciones.setConnectionTimeout(30);
@@ -71,10 +70,9 @@ public class MqttConfig {
         return new DirectChannel();
     }
 
-    // Adaptador de Mensajes (Suscripción al tema en la nube)
+    // 3. Adaptador de Mensajes (Suscripción al tema en la nube)
     @Bean
     public MessageProducer emisorMensajes() {
-        // Usamos un ClientID único para evitar conflictos con otros dispositivos
         String idCliente = "server_pavewatch_" + System.currentTimeMillis();
 
         MqttPahoMessageDrivenChannelAdapter adaptador = new MqttPahoMessageDrivenChannelAdapter(idCliente, mqttClientFactory(), topico);
@@ -85,13 +83,13 @@ public class MqttConfig {
         return adaptador;
     }
 
-    // === 4. Procesamiento del JSON y PostGIS ===
+    // === 4. Procesamiento del JSON y ALGORITMO DE CONFIRMACIÓN ESPACIAL ===
     @Bean
     @ServiceActivator(inputChannel = "mqttCanalInput")
     public MessageHandler handler() {
         return message -> {
             String payload = (String) message.getPayload();
-            System.out.println("¡Bache recibido desde HiveMQ Cloud! Datos: " + payload);
+            System.out.println("¡Alerta MQTT desde HiveMQ Cloud! Datos: " + payload);
 
             try {
                 ObjectMapper mapeador = new ObjectMapper();
@@ -102,19 +100,54 @@ public class MqttConfig {
                 double severidad = jsonNode.get("severidad").asDouble();
                 String dispositivo = jsonNode.has("dispositivo") ? jsonNode.get("dispositivo").asText() : "desconocido";
 
+                // Creamos el punto GPS (Atención: en JTS el orden siempre es Longitud X, Latitud Y)
                 Point ubicacion = geometryFactory.createPoint(new Coordinate(longitud, latitud));
+                BigDecimal severidadNueva = BigDecimal.valueOf(severidad);
 
-                EventoPavewatch nuevoBache = new EventoPavewatch();
-                nuevoBache.setUbicacion(ubicacion);
-                nuevoBache.setSeveridad(BigDecimal.valueOf(severidad));
-                nuevoBache.setReportadoPor(dispositivo);
-                nuevoBache.setVerificado(false);
+                // ---> EJECUCIÓN DEL RADAR ESPACIAL (8 Metros) <---
+                Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(ubicacion, 8.0);
 
-                repository.save(nuevoBache);
-                System.out.println("-> Guardado exitosamente en Base de Datos vía encriptada.");
+                if (bacheExistenteOpt.isPresent()) {
+                    // YA EXISTÍA UN BACHE EN ESA ZONA: Fusionamos la alerta
+                    EventoPavewatch bacheExistente = bacheExistenteOpt.get();
+
+                    int nuevasConfirmaciones = bacheExistente.getContadorConfirmaciones() + 1;
+                    bacheExistente.setContadorConfirmaciones(nuevasConfirmaciones);
+
+                    // Calculamos la severidad promedio del impacto para no sobreescribirla
+                    if (bacheExistente.getSeveridad() != null) {
+                        BigDecimal promedio = bacheExistente.getSeveridad()
+                                .add(severidadNueva)
+                                .divide(new BigDecimal(2), 2, RoundingMode.HALF_UP);
+                        bacheExistente.setSeveridad(promedio);
+                    }
+
+                    // REGLA DE AUTO-VERIFICACIÓN: Si al menos 3 carros saltaron ahí, es un bache real
+                    if (nuevasConfirmaciones >= 3) {
+                        bacheExistente.setVerificado(true);
+                        System.out.println("⭐ ¡ALERTA CONFIRMADA! El bache en ID " + bacheExistente.getId() + " ya alcanzó 3 detecciones.");
+                    }
+
+                    repository.save(bacheExistente);
+                    System.out.println("-> Bache existente actualizado. Confirmaciones actuales: " + nuevasConfirmaciones);
+
+                } else {
+                    // ES LA PRIMERA DETECCIÓN EN ESTA CALLE: Creamos el registro
+                    EventoPavewatch nuevoBache = new EventoPavewatch();
+                    nuevoBache.setUbicacion(ubicacion);
+                    nuevoBache.setSeveridad(severidadNueva);
+                    nuevoBache.setReportadoPor(dispositivo);
+                    nuevoBache.setVerificado(false); // Nace en falso en espera de confirmaciones por consenso
+                    nuevoBache.setContadorConfirmaciones(1);
+                    nuevoBache.setOrigenDeteccion("SENSOR_IMU");
+                    nuevoBache.setClasificacionIa("SIN_ANALIZAR");
+
+                    repository.save(nuevoBache);
+                    System.out.println("-> Nuevo bache sospechoso registrado con éxito en Base de Datos.");
+                }
 
             } catch (Exception e) {
-                System.err.println("Error procesando mensaje de la nube: " + e.getMessage());
+                System.err.println("❌ Error procesando mensaje MQTT o calculando distancia espacial: " + e.getMessage());
             }
         };
     }
