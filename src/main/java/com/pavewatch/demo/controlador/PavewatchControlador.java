@@ -173,7 +173,9 @@ public class PavewatchControlador {
 
         return ResponseEntity.ok(reporteDistrital);
     }
-
+    /**
+     * ENDPOINT DE MAPA (andres uwu?)
+     */
     @GetMapping("/mapa")
     public List<EventoPavewatch> obtenerDatosParaMapa() {
         // Esto va a la base de datos y trae todos los baches registrados
