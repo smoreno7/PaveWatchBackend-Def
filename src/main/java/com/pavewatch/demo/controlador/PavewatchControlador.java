@@ -174,6 +174,12 @@ public class PavewatchControlador {
         return ResponseEntity.ok(reporteDistrital);
     }
 
+    @GetMapping("/mapa")
+    public List<EventoPavewatch> obtenerDatosParaMapa() {
+        // Esto va a la base de datos y trae todos los baches registrados
+        return repository.findAll();
+    }
+
     /**
      * GRÁFICO DE CLASIFICACIÓN VISUAL (OPENCV):
      * Devuelve la cantidad de baches divididos por Leve, Moderado y Cráter.

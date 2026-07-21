@@ -1,5 +1,7 @@
 package com.pavewatch.demo.modelo;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import org.locationtech.jts.geom.Point;
 import java.math.BigDecimal;
@@ -16,6 +18,8 @@ public class EventoPavewatch {
     @Column(name = "distrito")
     private String distrito = "San Martín de Porres"; // Valor por defecto para pruebas
 
+    // 1. AGREGA @JsonIgnore AQUÍ PARA EVITAR EL BUCLE INFINITO DE ENVELOPES
+    @JsonIgnore
     @Column(columnDefinition = "geography(Point,4326)")
     private Point ubicacion;
 
@@ -78,4 +82,15 @@ public class EventoPavewatch {
 
     public String getOrigenDeteccion() { return origenDeteccion; }
     public void setOrigenDeteccion(String origenDeteccion) { this.origenDeteccion = origenDeteccion; }
+
+    // 2. AGREGA ESTOS DOS MÉTODOS PARA EXPORTAR LAS COORDENADAS AL JSON
+    @JsonProperty("latitud")
+    public Double getLatitud() {
+        return ubicacion != null ? ubicacion.getY() : null;
+    }
+
+    @JsonProperty("longitud")
+    public Double getLongitud() {
+        return ubicacion != null ? ubicacion.getX() : null;
+    }
 }
