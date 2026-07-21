@@ -141,6 +141,40 @@ public class PavewatchControlador {
     }
 
     /**
+     * ENDPOINT DE SALUD VIAL POR DISTRITO (Concurso):
+     * Devuelve el ranking de distritos con su porcentaje de pavimento óptimo
+     * y cantidad de baches pendientes de reparación.
+     */
+    @GetMapping("/estadisticas/salud-por-distrito")
+    public ResponseEntity<List<Map<String, Object>>> getSaludVialPorDistrito() {
+        List<Object[]> resultados = repository.obtenerSaludVialPorDistrito();
+        List<Map<String, Object>> reporteDistrital = new java.util.ArrayList<>();
+
+        for (Object[] fila : resultados) {
+            Map<String, Object> distritoData = new HashMap<>();
+            distritoData.put("distrito", fila[0]);
+            distritoData.put("total_alertas", fila[1]);
+            distritoData.put("baches_confirmados", fila[2]);
+            distritoData.put("baches_pendientes", fila[3]);
+            distritoData.put("salud_vial_porcentaje", fila[4]);
+
+            // Etiqueta semáforo para la interfaz gráfica
+            double salud = ((Number) fila[4]).doubleValue();
+            if (salud >= 80.0) {
+                distritoData.put("estado_general", "ÓPTIMO");
+            } else if (salud >= 50.0) {
+                distritoData.put("estado_general", "REGULAR - REQUIERE MANTENIMIENTO");
+            } else {
+                distritoData.put("estado_general", "CRÍTICO - EMERGENCIA VIAL");
+            }
+
+            reporteDistrital.add(distritoData);
+        }
+
+        return ResponseEntity.ok(reporteDistrital);
+    }
+
+    /**
      * GRÁFICO DE CLASIFICACIÓN VISUAL (OPENCV):
      * Devuelve la cantidad de baches divididos por Leve, Moderado y Cráter.
      */

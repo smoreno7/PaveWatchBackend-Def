@@ -13,6 +13,9 @@ public class EventoPavewatch {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "distrito")
+    private String distrito = "San Martín de Porres"; // Valor por defecto para pruebas
+
     @Column(columnDefinition = "geography(Point,4326)")
     private Point ubicacion;
 
@@ -69,6 +72,9 @@ public class EventoPavewatch {
 
     public String getClasificacionIa() { return clasificacionIa; }
     public void setClasificacionIa(String clasificacionIa) { this.clasificacionIa = clasificacionIa; }
+
+    public String getDistrito() { return distrito; }
+    public void setDistrito(String distrito) { this.distrito = distrito; }
 
     public String getOrigenDeteccion() { return origenDeteccion; }
     public void setOrigenDeteccion(String origenDeteccion) { this.origenDeteccion = origenDeteccion; }

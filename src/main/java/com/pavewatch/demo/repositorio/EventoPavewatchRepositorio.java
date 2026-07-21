@@ -40,4 +40,21 @@ public interface EventoPavewatchRepositorio extends JpaRepository<EventoPavewatc
      */
     @Query("SELECT e.clasificacionIa, COUNT(e) FROM EventoPavewatch e GROUP BY e.clasificacionIa")
     List<Object[]> contarBachesPorClasificacionIa();
+
+    /**
+     * ÍNDICE DE SALUD VIAL POR DISTRITO (Plus Concurso):
+     * Agrupa los reportes por distrito, cuenta los confirmados vs. pendientes
+     * y calcula un porcentaje de calidad de pavimento para las autoridades.
+     */
+    @Query(value = "SELECT e.distrito AS distrito, " +
+            "COUNT(*) AS total_alertas, " +
+            "SUM(CASE WHEN e.verificado = true THEN 1 ELSE 0 END) AS baches_confirmados, " +
+            "SUM(CASE WHEN e.verificado = false THEN 1 ELSE 0 END) AS baches_pendientes, " +
+            "ROUND(GREATEST(0.0, 100.0 - (SUM(CASE WHEN e.verificado = true THEN 1 ELSE 0 END) * 3.5) - (SUM(CASE WHEN e.verificado = false THEN 1 ELSE 0 END) * 1.5)), 2) AS indice_salud_vial " +
+            "FROM eventos_pavewatch e " +
+            "WHERE e.distrito IS NOT NULL " +
+            "GROUP BY e.distrito " +
+            "ORDER BY indice_salud_vial ASC",
+            nativeQuery = true)
+    List<Object[]> obtenerSaludVialPorDistrito();
 }

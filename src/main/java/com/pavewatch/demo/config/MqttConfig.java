@@ -99,6 +99,8 @@ public class MqttConfig {
                 double longitud = jsonNode.get("longitud").asDouble();
                 double severidad = jsonNode.get("severidad").asDouble();
                 String dispositivo = jsonNode.has("dispositivo") ? jsonNode.get("dispositivo").asText() : "desconocido";
+                // Lées el distrito del JSON si viene de la app, o le pones uno por defecto
+                String distrito = jsonNode.has("distrito") ? jsonNode.get("distrito").asText() : "San Martín de Porres";
 
                 // Creamos el punto GPS (Atención: en JTS el orden siempre es Longitud X, Latitud Y)
                 Point ubicacion = geometryFactory.createPoint(new Coordinate(longitud, latitud));
@@ -128,6 +130,8 @@ public class MqttConfig {
                         System.out.println("⭐ ¡ALERTA CONFIRMADA! El bache en ID " + bacheExistente.getId() + " ya alcanzó 3 detecciones.");
                     }
 
+                    bacheExistente.setDistrito(distrito);
+
                     repository.save(bacheExistente);
                     System.out.println("-> Bache existente actualizado. Confirmaciones actuales: " + nuevasConfirmaciones);
 
@@ -141,6 +145,7 @@ public class MqttConfig {
                     nuevoBache.setContadorConfirmaciones(1);
                     nuevoBache.setOrigenDeteccion("SENSOR_IMU");
                     nuevoBache.setClasificacionIa("SIN_ANALIZAR");
+                    nuevoBache.setDistrito(distrito);
 
                     repository.save(nuevoBache);
                     System.out.println("-> Nuevo bache sospechoso registrado con éxito en Base de Datos.");
