@@ -174,7 +174,7 @@ public class PavewatchControlador {
         return ResponseEntity.ok(reporteDistrital);
     }
     /**
-     * ENDPOINT DE MAPA (andres uwu?)
+     * ENDPOINT DE MAPA *
      */
     @GetMapping("/mapa")
     public List<EventoPavewatch> obtenerDatosParaMapa() {
