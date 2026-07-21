@@ -105,7 +105,7 @@ public class MqttConfig {
                 BigDecimal severidadNueva = BigDecimal.valueOf(severidad);
 
                 // ---> EJECUCIÓN DEL RADAR ESPACIAL (8 Metros) <---
-                Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(ubicacion, 8.0);
+                Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(ubicacion, 4.0);
 
                 if (bacheExistenteOpt.isPresent()) {
                     // YA EXISTÍA UN BACHE EN ESA ZONA: Fusionamos la alerta

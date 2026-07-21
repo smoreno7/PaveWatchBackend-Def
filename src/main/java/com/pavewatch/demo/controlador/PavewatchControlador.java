@@ -64,7 +64,7 @@ public class PavewatchControlador {
         }
 
         // 2. RADAR ESPACIAL: Buscamos si ya existe un bache a menos de 8 metros a la redonda
-        Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(nuevoEvento.getUbicacion(), 8.0);
+        Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(nuevoEvento.getUbicacion(), 4.0);
 
         if (bacheExistenteOpt.isPresent()) {
             // ---> CASO A: YA EXISTÍA UN BACHE CERCA (ALGORITMO DE FUSIÓN) <---
