@@ -47,7 +47,6 @@ public class MqttConfig {
 
     private final GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
 
-    // 1. Configuración de la conexión segura a HiveMQ Cloud
     @Bean
     public MqttPahoClientFactory mqttClientFactory() {
         DefaultMqttPahoClientFactory factory = new DefaultMqttPahoClientFactory();
@@ -57,33 +56,29 @@ public class MqttConfig {
         opciones.setUserName(username);
         opciones.setPassword(password.toCharArray());
         opciones.setCleanSession(true);
-        opciones.setAutomaticReconnect(true); // Si el WiFi parpadea, se reconecta solo
+        opciones.setAutomaticReconnect(true);
         opciones.setConnectionTimeout(30);
 
         factory.setConnectionOptions(opciones);
         return factory;
     }
 
-    // 2. Canal de entrada
     @Bean
     public MessageChannel mqttCanalInput() {
         return new DirectChannel();
     }
 
-    // 3. Adaptador de Mensajes (Suscripción al tema en la nube)
     @Bean
     public MessageProducer emisorMensajes() {
         String idCliente = "server_pavewatch_" + System.currentTimeMillis();
-
         MqttPahoMessageDrivenChannelAdapter adaptador = new MqttPahoMessageDrivenChannelAdapter(idCliente, mqttClientFactory(), topico);
         adaptador.setCompletionTimeout(5000);
         adaptador.setConverter(new DefaultPahoMessageConverter());
-        adaptador.setQos(1); // QOS 1 garantiza que el bache se entregue al menos una vez
+        adaptador.setQos(1);
         adaptador.setOutputChannel(mqttCanalInput());
         return adaptador;
     }
 
-    // === 4. Procesamiento del JSON y ALGORITMO DE CONFIRMACIÓN ESPACIAL ===
     @Bean
     @ServiceActivator(inputChannel = "mqttCanalInput")
     public MessageHandler handler() {
@@ -98,25 +93,28 @@ public class MqttConfig {
                 double latitud = jsonNode.get("latitud").asDouble();
                 double longitud = jsonNode.get("longitud").asDouble();
                 double severidad = jsonNode.get("severidad").asDouble();
+
+                // --- 1. FILTRO ANTI-RIPIO: Si el salto es menor a 8.0, lo ignoramos para no saturar ---
+                if (severidad < 8.0) {
+                    System.out.println("⏳ Alerta ignorada: Severidad leve (" + severidad + ") considerada ruido de pavimento.");
+                    return;
+                }
+
                 String dispositivo = jsonNode.has("dispositivo") ? jsonNode.get("dispositivo").asText() : "desconocido";
-                // Lées el distrito del JSON si viene de la app, o le pones uno por defecto
                 String distrito = jsonNode.has("distrito") ? jsonNode.get("distrito").asText() : "San Martín de Porres";
 
-                // Creamos el punto GPS (Atención: en JTS el orden siempre es Longitud X, Latitud Y)
                 Point ubicacion = geometryFactory.createPoint(new Coordinate(longitud, latitud));
                 BigDecimal severidadNueva = BigDecimal.valueOf(severidad);
 
-                // ---> EJECUCIÓN DEL RADAR ESPACIAL (8 Metros) <---
-                Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(ubicacion, 4.0);
+                // --- 2. RADAR ESPACIAL AMPLIADO A 20 METROS ---
+                Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(ubicacion, 20.0);
 
                 if (bacheExistenteOpt.isPresent()) {
-                    // YA EXISTÍA UN BACHE EN ESA ZONA: Fusionamos la alerta
                     EventoPavewatch bacheExistente = bacheExistenteOpt.get();
 
                     int nuevasConfirmaciones = bacheExistente.getContadorConfirmaciones() + 1;
                     bacheExistente.setContadorConfirmaciones(nuevasConfirmaciones);
 
-                    // Calculamos la severidad promedio del impacto para no sobreescribirla
                     if (bacheExistente.getSeveridad() != null) {
                         BigDecimal promedio = bacheExistente.getSeveridad()
                                 .add(severidadNueva)
@@ -124,24 +122,21 @@ public class MqttConfig {
                         bacheExistente.setSeveridad(promedio);
                     }
 
-                    // REGLA DE AUTO-VERIFICACIÓN: Si al menos 3 carros saltaron ahí, es un bache real
                     if (nuevasConfirmaciones >= 3) {
                         bacheExistente.setVerificado(true);
                         System.out.println("⭐ ¡ALERTA CONFIRMADA! El bache en ID " + bacheExistente.getId() + " ya alcanzó 3 detecciones.");
                     }
 
                     bacheExistente.setDistrito(distrito);
-
                     repository.save(bacheExistente);
                     System.out.println("-> Bache existente actualizado. Confirmaciones actuales: " + nuevasConfirmaciones);
 
                 } else {
-                    // ES LA PRIMERA DETECCIÓN EN ESTA CALLE: Creamos el registro
                     EventoPavewatch nuevoBache = new EventoPavewatch();
                     nuevoBache.setUbicacion(ubicacion);
                     nuevoBache.setSeveridad(severidadNueva);
                     nuevoBache.setReportadoPor(dispositivo);
-                    nuevoBache.setVerificado(false); // Nace en falso en espera de confirmaciones por consenso
+                    nuevoBache.setVerificado(false);
                     nuevoBache.setContadorConfirmaciones(1);
                     nuevoBache.setOrigenDeteccion("SENSOR_IMU");
                     nuevoBache.setClasificacionIa("SIN_ANALIZAR");

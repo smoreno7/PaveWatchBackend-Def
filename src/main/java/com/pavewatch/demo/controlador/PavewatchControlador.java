@@ -19,62 +19,40 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/pavewatchs")
-@CrossOrigin(origins = "*") // Permite que la app en Flutter/React y el servidor se comuniquen sin bloqueo CORS
+@CrossOrigin(origins = "*")
 public class PavewatchControlador {
 
     @Autowired
     private EventoPavewatchRepositorio repository;
 
-    // Fábrica para crear el punto espacial de PostGIS usando el estándar GPS mundial (SRID 4326)
     private final GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
-
-    // ==========================================
-    // 1. ENDPOINTS BÁSICOS Y MAPA DE CALOR
-    // ==========================================
 
     @GetMapping
     public List<EventoPavewatch> getAllPavewatchs() {
         return repository.findAll();
     }
 
-    /**
-     * PARA EL MAPA DE CALOR (Frontend):
-     * Devuelve solo los baches que tienen alta probabilidad de ser reales
-     * para no ensuciar el mapa con falsas alarmas de rompemuelles o baches ya reparados.
-     */
     @GetMapping("/mapa-calor")
     public List<EventoPavewatch> getMapaCalor() {
         return repository.obtenerBachesParaMapaCalor();
     }
 
-    // ==========================================
-    // 2. EL ALGORITMO DE CONFIRMACIÓN (NUEVO REGISTRO)
-    // ==========================================
-
-    /**
-     * RECIBE LA TELEMETRÍA DE LA APP O EL SCRIPT DE OPENCV:
-     * Aquí ejecutamos el algoritmo de confirmación espacial.
-     */
     @PostMapping("/registrar")
     public ResponseEntity<EventoPavewatch> registrarOConfirmarBache(@RequestBody EventoPavewatch nuevoEvento) {
 
-        // 1. Validamos que tengamos la ubicación del evento
         if (nuevoEvento.getUbicacion() == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        // 2. RADAR ESPACIAL: Buscamos si ya existe un bache a menos de 8 metros a la redonda
-        Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(nuevoEvento.getUbicacion(), 4.0);
+        // --- RADAR ESPACIAL AMPLIADO A 20 METROS ---
+        Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(nuevoEvento.getUbicacion(), 20.0);
 
         if (bacheExistenteOpt.isPresent()) {
-            // ---> CASO A: YA EXISTÍA UN BACHE CERCA (ALGORITMO DE FUSIÓN) <---
             EventoPavewatch bacheExistente = bacheExistenteOpt.get();
 
-            // Le sumamos +1 a las confirmaciones por cercanía
             int nuevasConfirmaciones = bacheExistente.getContadorConfirmaciones() + 1;
             bacheExistente.setContadorConfirmaciones(nuevasConfirmaciones);
 
-            // Actualizamos la severidad haciendo un promedio dinámico
             if (nuevoEvento.getSeveridad() != null && bacheExistente.getSeveridad() != null) {
                 BigDecimal severidadPromedio = bacheExistente.getSeveridad()
                         .add(nuevoEvento.getSeveridad())
@@ -82,15 +60,12 @@ public class PavewatchControlador {
                 bacheExistente.setSeveridad(severidadPromedio);
             }
 
-            // Si el nuevo aporte trae foto de OpenCV o viene de la IA, lo fusionamos
             if (nuevoEvento.getUrlFoto() != null && !nuevoEvento.getUrlFoto().isEmpty()) {
                 bacheExistente.setUrlFoto(nuevoEvento.getUrlFoto());
                 bacheExistente.setClasificacionIa(nuevoEvento.getClasificacionIa());
-                bacheExistente.setOrigenDeteccion("HIBRIDO"); // Confirmado por sensor + cámara
+                bacheExistente.setOrigenDeteccion("HIBRIDO");
             }
 
-            // REGLA DE VERIFICACIÓN AUTOMÁTICA:
-            // Si 3 carros diferentes ya pasaron y vibraron ahí, O si OpenCV lo clasificó como CRATER/MODERADO -> ¡Confirmado!
             if (nuevasConfirmaciones >= 3 ||
                     ("CRATER".equalsIgnoreCase(bacheExistente.getClasificacionIa()) ||
                             "MODERADO".equalsIgnoreCase(bacheExistente.getClasificacionIa()))) {
@@ -100,29 +75,19 @@ public class PavewatchControlador {
             return ResponseEntity.ok(repository.save(bacheExistente));
 
         } else {
-            // ---> CASO B: ES UN BACHE TOTALMENTE NUEVO <---
             nuevoEvento.setContadorConfirmaciones(1);
 
-            // Si nació de un reporte visual o ya trae foto de la IA, lo podemos verificar de inmediato
             if (nuevoEvento.getUrlFoto() != null && !nuevoEvento.getUrlFoto().isEmpty() &&
                     !"SIN_ANALIZAR".equalsIgnoreCase(nuevoEvento.getClasificacionIa())) {
                 nuevoEvento.setVerificado(true);
             } else {
-                nuevoEvento.setVerificado(false); // Nace como "sospechoso" en espera de que pasen más carros
+                nuevoEvento.setVerificado(false);
             }
 
             return ResponseEntity.ok(repository.save(nuevoEvento));
         }
     }
 
-    // ==========================================
-    // 3. ESTADÍSTICAS PARA LOS GRÁFICOS DE ANDRÉS
-    // ==========================================
-
-    /**
-     * ENDPOINT DE ESTADÍSTICAS GENERALES:
-     * Alimenta los gráficos del frontend con contadores en tiempo real.
-     */
     @GetMapping("/estadisticas/resumen")
     public ResponseEntity<Map<String, Object>> getResumenEstadisticas() {
         List<EventoPavewatch> todos = repository.findAll();
@@ -140,11 +105,6 @@ public class PavewatchControlador {
         return ResponseEntity.ok(stats);
     }
 
-    /**
-     * ENDPOINT DE SALUD VIAL POR DISTRITO (Concurso):
-     * Devuelve el ranking de distritos con su porcentaje de pavimento óptimo
-     * y cantidad de baches pendientes de reparación.
-     */
     @GetMapping("/estadisticas/salud-por-distrito")
     public ResponseEntity<List<Map<String, Object>>> getSaludVialPorDistrito() {
         List<Object[]> resultados = repository.obtenerSaludVialPorDistrito();
@@ -158,7 +118,6 @@ public class PavewatchControlador {
             distritoData.put("baches_pendientes", fila[3]);
             distritoData.put("salud_vial_porcentaje", fila[4]);
 
-            // Etiqueta semáforo para la interfaz gráfica
             double salud = ((Number) fila[4]).doubleValue();
             if (salud >= 80.0) {
                 distritoData.put("estado_general", "ÓPTIMO");
@@ -173,19 +132,12 @@ public class PavewatchControlador {
 
         return ResponseEntity.ok(reporteDistrital);
     }
-    /**
-     * ENDPOINT DE MAPA lol *
-     */
+
     @GetMapping("/mapa")
     public List<EventoPavewatch> obtenerDatosParaMapa() {
-        // Esto va a la base de datos y trae todos los baches registrados
         return repository.findAll();
     }
 
-    /**
-     * GRÁFICO DE CLASIFICACIÓN VISUAL (OPENCV):
-     * Devuelve la cantidad de baches divididos por Leve, Moderado y Cráter.
-     */
     @GetMapping("/estadisticas/por-clasificacion-ia")
     public ResponseEntity<Map<String, Long>> getEstadisticasPorIa() {
         List<Object[]> resultados = repository.contarBachesPorClasificacionIa();
