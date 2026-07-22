@@ -6,6 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+// IMPORTACIONES NECESARIAS (Pon esto arriba con los demás import)
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -57,4 +60,13 @@ public interface EventoPavewatchRepositorio extends JpaRepository<EventoPavewatc
             "ORDER BY indice_salud_vial ASC",
             nativeQuery = true)
     List<Object[]> obtenerSaludVialPorDistrito();
+
+    // CONEXIÓN CON PYTHON: Para verificar el bache desde la IA
+    @Modifying
+    @Transactional
+    @Query("UPDATE EventoPavewatch e SET e.verificado = :estado, e.clasificacionIa = :clasificacion WHERE e.id = :id")
+    void actualizarEstadoYClasificacion(@Param("id") Long id, @Param("estado") boolean estado, @Param("clasificacion") String clasificacion);
+
+    // CONEXIÓN CON PYTHON: Para buscar baches que la IA aún no revisa
+    List<EventoPavewatch> findByClasificacionIa(String clasificacionIa);
 }

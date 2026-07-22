@@ -90,6 +90,133 @@ public class MqttConfig {
                 ObjectMapper mapeador = new ObjectMapper();
                 JsonNode jsonNode = mapeador.readTree(payload);
 
+                // ==========================================================
+                // LÓGICA DE IA (PYTHON / YOLO)
+                // ==========================================================
+                if (jsonNode.has("area_pixeles")) {
+                    String severidadIa = jsonNode.get("severidad").asText().toUpperCase().replace("Á", "A");
+
+                    // Coordenadas temporales hasta que Python mande GPS
+                    double latitud = -12.016335;
+                    double longitud = -77.049658;
+                    Point ubicacion = geometryFactory.createPoint(new Coordinate(longitud, latitud));
+
+                    Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(ubicacion, 20.0);
+
+                    if (bacheExistenteOpt.isPresent()) {
+                        EventoPavewatch bache = bacheExistenteOpt.get();
+                        bache.setClasificacionIa(severidadIa);
+                        bache.setVerificado(true);
+                        bache.setOrigenDeteccion("HIBRIDO");
+                        repository.save(bache);
+                        System.out.println("⭐ ¡Bache existente confirmado por IA! Clasificación: " + severidadIa);
+                    } else {
+                        EventoPavewatch nuevoBache = new EventoPavewatch();
+                        nuevoBache.setUbicacion(ubicacion);
+                        nuevoBache.setSeveridad(BigDecimal.ZERO);
+                        nuevoBache.setReportadoPor("SISTEMA_IA");
+                        nuevoBache.setVerificado(true);
+                        nuevoBache.setContadorConfirmaciones(1);
+                        nuevoBache.setOrigenDeteccion("CAMARA_IA");
+                        nuevoBache.setClasificacionIa(severidadIa);
+                        nuevoBache.setDistrito("San Martín de Porres");
+                        repository.save(nuevoBache);
+                        System.out.println("-> Nuevo bache IA registrado en BD. Clasificación: " + severidadIa);
+                    }
+                    return;
+                }
+
+                // ==========================================================
+                // LÓGICA DE LA APP ANDROID (El código de tu amigo + nuestro fix)
+                // ==========================================================
+                double latitud = jsonNode.get("latitud").asDouble();
+                double longitud = jsonNode.get("longitud").asDouble();
+                double severidad = jsonNode.get("severidad").asDouble();
+                String dispositivo = jsonNode.has("dispositivo") ? jsonNode.get("dispositivo").asText() : "desconocido";
+                String fotoUrl = jsonNode.has("fotoUrl") ? jsonNode.get("fotoUrl").asText() : null;
+                String distrito = jsonNode.has("distrito") ? jsonNode.get("distrito").asText() : "San Martín de Porres";
+
+                // FILTRO ANTI-RIPIO (Solo aplica para el acelerómetro, no para fotos manuales)
+                if (severidad < 8.0 && !"app_FOTO".equals(dispositivo) && !"app_MANUAL".equals(dispositivo)) {
+                    System.out.println("⏳ Alerta ignorada: Severidad leve (" + severidad + ") considerada ruido de pavimento.");
+                    return;
+                }
+
+                Point ubicacion = geometryFactory.createPoint(new Coordinate(longitud, latitud));
+                BigDecimal severidadNueva = BigDecimal.valueOf(severidad);
+
+                Optional<EventoPavewatch> bacheExistenteOpt = repository.buscarBacheCercano(ubicacion, 20.0);
+
+                if (bacheExistenteOpt.isPresent()) {
+                    EventoPavewatch bacheExistente = bacheExistenteOpt.get();
+                    int nuevasConfirmaciones = bacheExistente.getContadorConfirmaciones() + 1;
+                    bacheExistente.setContadorConfirmaciones(nuevasConfirmaciones);
+
+                    if (bacheExistente.getSeveridad() != null) {
+                        BigDecimal promedio = bacheExistente.getSeveridad()
+                                .add(severidadNueva)
+                                .divide(new BigDecimal(2), 2, RoundingMode.HALF_UP);
+                        bacheExistente.setSeveridad(promedio);
+                    }
+
+                    if (fotoUrl != null && !fotoUrl.isEmpty()) {
+                        bacheExistente.setUrlFoto(fotoUrl);
+                        bacheExistente.setOrigenDeteccion("REPORTE_FOTO");
+                    }
+
+                    if (nuevasConfirmaciones >= 3 || "app_FOTO".equals(dispositivo)) {
+                        bacheExistente.setVerificado(true);
+                        System.out.println("⭐ ¡ALERTA CONFIRMADA! El bache en ID " + bacheExistente.getId() + " fue verificado.");
+                    }
+
+                    bacheExistente.setDistrito(distrito);
+                    repository.save(bacheExistente);
+                    System.out.println("-> Bache existente actualizado. Confirmaciones actuales: " + nuevasConfirmaciones);
+
+                } else {
+                    EventoPavewatch nuevoBache = new EventoPavewatch();
+                    nuevoBache.setUbicacion(ubicacion);
+                    nuevoBache.setSeveridad(severidadNueva);
+                    nuevoBache.setReportadoPor(dispositivo);
+                    nuevoBache.setContadorConfirmaciones(1);
+                    nuevoBache.setClasificacionIa("SIN_ANALIZAR");
+                    nuevoBache.setDistrito(distrito);
+
+                    if (fotoUrl != null && !fotoUrl.isEmpty()) {
+                        nuevoBache.setUrlFoto(fotoUrl);
+                    }
+
+                    if ("app_FOTO".equals(dispositivo)) {
+                        nuevoBache.setOrigenDeteccion("REPORTE_FOTO");
+                        nuevoBache.setVerificado(true);
+                    } else if ("app_MANUAL".equals(dispositivo)) {
+                        nuevoBache.setOrigenDeteccion("REPORTE_MANUAL");
+                        nuevoBache.setVerificado(false);
+                    } else {
+                        nuevoBache.setOrigenDeteccion("SENSOR_IMU");
+                        nuevoBache.setVerificado(false);
+                    }
+
+                    repository.save(nuevoBache);
+                    System.out.println("-> Nuevo bache (" + dispositivo + ") registrado con éxito en Base de Datos.");
+                }
+
+            } catch (Exception e) {
+                System.err.println("❌ Error procesando mensaje MQTT o calculando distancia espacial: " + e.getMessage());
+            }
+        };
+    }
+    /*@Bean
+    @ServiceActivator(inputChannel = "mqttCanalInput")
+    public MessageHandler handler() {
+        return message -> {
+            String payload = (String) message.getPayload();
+            System.out.println("¡Alerta MQTT desde HiveMQ Cloud! Datos: " + payload);
+
+            try {
+                ObjectMapper mapeador = new ObjectMapper();
+                JsonNode jsonNode = mapeador.readTree(payload);
+
                 double latitud = jsonNode.get("latitud").asDouble();
                 double longitud = jsonNode.get("longitud").asDouble();
                 double severidad = jsonNode.get("severidad").asDouble();
@@ -150,5 +277,5 @@ public class MqttConfig {
                 System.err.println("❌ Error procesando mensaje MQTT o calculando distancia espacial: " + e.getMessage());
             }
         };
-    }
+    }*/
 }

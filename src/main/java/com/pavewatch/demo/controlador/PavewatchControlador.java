@@ -151,4 +151,29 @@ public class PavewatchControlador {
 
         return ResponseEntity.ok(estadisticasIa);
     }
+
+    // ==========================================
+    // ENDPOINTS PARA LA INTELIGENCIA ARTIFICIAL (PYTHON)
+    // ==========================================
+
+    @PutMapping("/{id}/verificar")
+    public ResponseEntity<?> verificarBache(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+
+        // Leemos los datos que nos manda Python
+        boolean estaVerificado = (Boolean) payload.get("verificado");
+        String nuevaClasificacion = (String) payload.get("clasificacion_ia");
+
+        // Actualizamos la base de datos
+        repository.actualizarEstadoYClasificacion(id, estaVerificado, nuevaClasificacion);
+
+        return ResponseEntity.ok().body("Bache " + id + " actualizado. Verificado: " + estaVerificado + " | Clasificación: " + nuevaClasificacion);
+    }
+
+    @GetMapping("/pendientes")
+    public ResponseEntity<List<EventoPavewatch>> obtenerBachesPendientes() {
+        // Busca todos los que tengan el estado inicial
+        List<EventoPavewatch> pendientes = repository.findByClasificacionIa("SIN_ANALIZAR");
+        return ResponseEntity.ok(pendientes);
+    }
+
 }
