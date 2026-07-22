@@ -61,11 +61,17 @@ public interface EventoPavewatchRepositorio extends JpaRepository<EventoPavewatc
             nativeQuery = true)
     List<Object[]> obtenerSaludVialPorDistrito();
 
-    // CONEXIÓN CON PYTHON: Para verificar el bache desde la IA
+    // CONEXIÓN CON PYTHON: Para verificar el bache desde la IA y subir el contador
     @Modifying
     @Transactional
-    @Query("UPDATE EventoPavewatch e SET e.verificado = :estado, e.clasificacionIa = :clasificacion WHERE e.id = :id")
-    void actualizarEstadoYClasificacion(@Param("id") Long id, @Param("estado") boolean estado, @Param("clasificacion") String clasificacion);
+    @Query("UPDATE EventoPavewatch e SET " +
+            "e.verificado = :estado, " +
+            "e.clasificacionIa = :clasificacion, " +
+            "e.contadorConfirmaciones = CASE WHEN :estado = true THEN 3 ELSE e.contadorConfirmaciones END " +
+            "WHERE e.id = :id")
+    void actualizarEstadoYClasificacion(@Param("id") Long id,
+                                        @Param("estado") boolean estado,
+                                        @Param("clasificacion") String clasificacion);
 
     // CONEXIÓN CON PYTHON: Para buscar baches que la IA aún no revisa
     List<EventoPavewatch> findByClasificacionIa(String clasificacionIa);

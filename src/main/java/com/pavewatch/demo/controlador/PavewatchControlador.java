@@ -50,31 +50,38 @@ public class PavewatchControlador {
         if (bacheExistenteOpt.isPresent()) {
             EventoPavewatch bacheExistente = bacheExistenteOpt.get();
 
-            int nuevasConfirmaciones = bacheExistente.getContadorConfirmaciones() + 1;
-            bacheExistente.setContadorConfirmaciones(nuevasConfirmaciones);
-
-            if (nuevoEvento.getSeveridad() != null && bacheExistente.getSeveridad() != null) {
-                BigDecimal severidadPromedio = bacheExistente.getSeveridad()
-                        .add(nuevoEvento.getSeveridad())
-                        .divide(new BigDecimal(2), 2, RoundingMode.HALF_UP);
-                bacheExistente.setSeveridad(severidadPromedio);
-            }
-
+            // NUEVA LÓGICA: ¿Viene con foto nueva?
             if (nuevoEvento.getUrlFoto() != null && !nuevoEvento.getUrlFoto().isEmpty()) {
+                // NO sumamos el contador.
+                // Actualizamos la foto y forzamos a la IA a volver a analizar.
                 bacheExistente.setUrlFoto(nuevoEvento.getUrlFoto());
-                bacheExistente.setClasificacionIa(nuevoEvento.getClasificacionIa());
+                bacheExistente.setClasificacionIa("SIN_ANALIZAR");
                 bacheExistente.setOrigenDeteccion("HIBRIDO");
-            }
+                bacheExistente.setVerificado(false); // Le quitamos el check hasta que Python decida
 
-            if (nuevasConfirmaciones >= 3 ||
-                    ("CRATER".equalsIgnoreCase(bacheExistente.getClasificacionIa()) ||
-                            "MODERADO".equalsIgnoreCase(bacheExistente.getClasificacionIa()))) {
-                bacheExistente.setVerificado(true);
+            } else {
+                // Es un reporte puro del sensor IMU (Sin foto) -> Sumamos contador normal
+                int nuevasConfirmaciones = bacheExistente.getContadorConfirmaciones() + 1;
+                bacheExistente.setContadorConfirmaciones(nuevasConfirmaciones);
+
+                if (nuevoEvento.getSeveridad() != null && bacheExistente.getSeveridad() != null) {
+                    BigDecimal severidadPromedio = bacheExistente.getSeveridad()
+                            .add(nuevoEvento.getSeveridad())
+                            .divide(new BigDecimal(2), 2, RoundingMode.HALF_UP);
+                    bacheExistente.setSeveridad(severidadPromedio);
+                }
+
+                if (nuevasConfirmaciones >= 3 ||
+                        ("CRATER".equalsIgnoreCase(bacheExistente.getClasificacionIa()) ||
+                                "MODERADO".equalsIgnoreCase(bacheExistente.getClasificacionIa()))) {
+                    bacheExistente.setVerificado(true);
+                }
             }
 
             return ResponseEntity.ok(repository.save(bacheExistente));
 
         } else {
+            // LÓGICA ORIGINAL PARA BACHES NUEVOS (Se mantiene intacta)
             nuevoEvento.setContadorConfirmaciones(1);
 
             if (nuevoEvento.getUrlFoto() != null && !nuevoEvento.getUrlFoto().isEmpty() &&

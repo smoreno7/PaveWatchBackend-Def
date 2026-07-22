@@ -149,31 +149,40 @@ public class MqttConfig {
 
                 if (bacheExistenteOpt.isPresent()) {
                     EventoPavewatch bacheExistente = bacheExistenteOpt.get();
-                    int nuevasConfirmaciones = bacheExistente.getContadorConfirmaciones() + 1;
-                    bacheExistente.setContadorConfirmaciones(nuevasConfirmaciones);
 
-                    if (bacheExistente.getSeveridad() != null) {
-                        BigDecimal promedio = bacheExistente.getSeveridad()
-                                .add(severidadNueva)
-                                .divide(new BigDecimal(2), 2, RoundingMode.HALF_UP);
-                        bacheExistente.setSeveridad(promedio);
-                    }
-
+                    // NUEVA LÓGICA: Separar si trae foto o si es pura vibración
                     if (fotoUrl != null && !fotoUrl.isEmpty()) {
+                        // Viene con foto nueva: Forzar a la IA a analizar, NO sumar contador
                         bacheExistente.setUrlFoto(fotoUrl);
+                        bacheExistente.setClasificacionIa("SIN_ANALIZAR");
+                        bacheExistente.setVerificado(false); // Espera la validación de tu script Python
                         bacheExistente.setOrigenDeteccion("REPORTE_FOTO");
+                        bacheExistente.setDistrito(distrito);
+                        System.out.println("🔄 Nueva foto en bache existente. Regresando a estado SIN_ANALIZAR para la IA.");
+                    } else {
+                        // Sin foto (Solo sensor IMU): Sumar contador normal
+                        int nuevasConfirmaciones = bacheExistente.getContadorConfirmaciones() + 1;
+                        bacheExistente.setContadorConfirmaciones(nuevasConfirmaciones);
+
+                        if (bacheExistente.getSeveridad() != null) {
+                            BigDecimal promedio = bacheExistente.getSeveridad()
+                                    .add(severidadNueva)
+                                    .divide(new BigDecimal(2), 2, RoundingMode.HALF_UP);
+                            bacheExistente.setSeveridad(promedio);
+                        }
+
+                        if (nuevasConfirmaciones >= 3) {
+                            bacheExistente.setVerificado(true);
+                            System.out.println("⭐ ¡ALERTA CONFIRMADA! El bache en ID " + bacheExistente.getId() + " fue verificado por múltiples lecturas IMU.");
+                        }
+                        bacheExistente.setDistrito(distrito);
+                        System.out.println("-> Bache existente actualizado solo por IMU. Confirmaciones: " + nuevasConfirmaciones);
                     }
 
-                    if (nuevasConfirmaciones >= 3 || "app_FOTO".equals(dispositivo)) {
-                        bacheExistente.setVerificado(true);
-                        System.out.println("⭐ ¡ALERTA CONFIRMADA! El bache en ID " + bacheExistente.getId() + " fue verificado.");
-                    }
-
-                    bacheExistente.setDistrito(distrito);
                     repository.save(bacheExistente);
-                    System.out.println("-> Bache existente actualizado. Confirmaciones actuales: " + nuevasConfirmaciones);
 
                 } else {
+                    // LÓGICA ORIGINAL PARA BACHES NUEVOS (Se mantiene intacta)
                     EventoPavewatch nuevoBache = new EventoPavewatch();
                     nuevoBache.setUbicacion(ubicacion);
                     nuevoBache.setSeveridad(severidadNueva);
@@ -188,7 +197,8 @@ public class MqttConfig {
 
                     if ("app_FOTO".equals(dispositivo)) {
                         nuevoBache.setOrigenDeteccion("REPORTE_FOTO");
-                        nuevoBache.setVerificado(true);
+                        // Lo ponemos en false para que pase por el filtro de tu IA de Python al ser nuevo
+                        nuevoBache.setVerificado(false);
                     } else if ("app_MANUAL".equals(dispositivo)) {
                         nuevoBache.setOrigenDeteccion("REPORTE_MANUAL");
                         nuevoBache.setVerificado(false);
@@ -200,7 +210,6 @@ public class MqttConfig {
                     repository.save(nuevoBache);
                     System.out.println("-> Nuevo bache (" + dispositivo + ") registrado con éxito en Base de Datos.");
                 }
-
             } catch (Exception e) {
                 System.err.println("❌ Error procesando mensaje MQTT o calculando distancia espacial: " + e.getMessage());
             }
