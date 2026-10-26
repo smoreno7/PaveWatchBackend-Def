@@ -57,7 +57,7 @@ public class PavewatchControlador {
                 bacheExistente.setUrlFoto(nuevoEvento.getUrlFoto());
                 bacheExistente.setClasificacionIa("SIN_ANALIZAR");
                 bacheExistente.setOrigenDeteccion("HIBRIDO");
-                bacheExistente.setVerificado(false); // Le quitamos el check hasta que Python decida
+                bacheExistente.setVerificado(false); // Le quitamo  s el check hasta que Python decida
 
             } else {
                 // Es un reporte puro del sensor IMU (Sin foto) -> Sumamos contador normal
